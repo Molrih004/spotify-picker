@@ -7,35 +7,28 @@
 <style>
 body { font-family: 'Montserrat', sans-serif; background: #1e1e2f; color: #fff; display: flex; flex-direction: column; align-items: center; padding: 20px; }
 h1 { margin-bottom: 20px; }
-#tracks, #searchResults { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; max-width: 900px; }
-.track-card { width: 160px; padding: 10px; border-radius: 12px; background: linear-gradient(135deg, #ff9a9e, #fad0c4); color: #fff; font-weight: bold; cursor: pointer; text-align: center; transition: transform 0.2s, box-shadow 0.2s; }
-.track-card:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+#tracks, #playlistContainer { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; max-width: 900px; margin-top: 15px; }
+.track-card { width: 160px; padding: 10px; border-radius: 12px; background: linear-gradient(135deg, #ff9a9e, #fad0c4); color: #fff; font-weight: bold; cursor: pointer; text-align: center; transition: transform 0.3s, box-shadow 0.3s, background 0.3s; opacity: 0; transform: translateY(20px); }
+.track-card.show { opacity: 1; transform: translateY(0); }
+.track-card:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
 .track-card img { width: 120px; height: 120px; border-radius: 8px; display: block; margin: 0 auto 8px; }
 button { margin-top: 20px; padding: 10px 20px; border: none; border-radius: 10px; background-color: #4CAF50; color: white; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
 button:hover { background-color: #45a049; }
 #status { margin-top: 15px; font-weight: bold; }
-#searchSection { margin-top: 30px; display: flex; gap: 10px; }
-#searchInput { padding: 5px 10px; border-radius: 5px; border: none; width: 300px; }
-#searchBtn { padding: 5px 15px; border-radius: 5px; border: none; background-color: #2196F3; color: white; font-weight: bold; cursor: pointer; }
-#searchBtn:hover { background-color: #1976D2; }
 </style>
 </head>
 <body>
 <h1>Choose a song to add!</h1>
 <div id="tracks"></div>
 <button id="refreshBtn">Refresh</button>
+<button id="showPlaylistBtn">Show My Playlist</button>
 <p id="status"></p>
-
-<div id="searchSection">
-  <input type="text" id="searchInput" placeholder="Search Spotify for a song">
-  <button id="searchBtn">Search</button>
-</div>
-<div id="searchResults"></div>
+<div id="playlistContainer"></div>
 
 <script>
 let allTracks = [];
 let currentTracks = [];
-let usedTrackUris = new Set(); // Track used URIs to prevent repeats
+let usedTrackUris = new Set();
 
 async function fetchPlaylistTracks() {
   const statusEl = document.getElementById("status");
@@ -44,7 +37,7 @@ async function fetchPlaylistTracks() {
     const res = await fetch("/api/get-tracks");
     if (!res.ok) throw new Error("Failed to fetch playlist tracks");
     allTracks = await res.json();
-    usedTrackUris.clear(); // reset used set on refresh
+    usedTrackUris.clear();
     getRandomTracks();
     statusEl.innerText = "";
   } catch (err) {
@@ -58,7 +51,6 @@ function getRandomTracks() {
   currentTracks = [];
   const available = allTracks.filter(t => !usedTrackUris.has(t.uri));
   if (!available.length) {
-    document.getElementById("status").innerText = "All songs used, refreshing playlist...";
     usedTrackUris.clear();
     getRandomTracks();
     return;
@@ -75,12 +67,13 @@ function getRandomTracks() {
 function renderTracks() {
   const container = document.getElementById("tracks");
   container.innerHTML = "";
-  currentTracks.forEach(track => {
+  currentTracks.forEach((track, i) => {
     const div = document.createElement("div");
     div.className = "track-card";
     div.innerHTML = `<img src="${track.image}" alt="${track.name}"><strong>${track.name}</strong><br><span style="font-size:0.85em">${track.artist}</span>`;
     div.onclick = () => addSong(track.uri);
     container.appendChild(div);
+    setTimeout(() => div.classList.add("show"), i*100);
   });
 }
 
@@ -105,36 +98,54 @@ async function addSong(trackUri) {
   }
 }
 
-// Refresh button
-document.getElementById("refreshBtn").onclick = fetchPlaylistTracks;
-
-// Spotify Search
-document.getElementById("searchBtn").onclick = async () => {
-  const query = document.getElementById("searchInput").value.trim();
-  const resultsEl = document.getElementById("searchResults");
-  if (!query) return;
-  resultsEl.innerHTML = "Searching...";
+// Show playlist
+document.getElementById("showPlaylistBtn").onclick = async () => {
+  const container = document.getElementById("playlistContainer");
+  const statusEl = document.getElementById("status");
+  statusEl.innerText = "Loading playlist...";
   try {
-    const res = await fetch(`/api/search-song?query=${encodeURIComponent(query)}`);
-    if (!res.ok) throw new Error("Search failed");
+    const res = await fetch("/api/get-my-playlist");
+    if (!res.ok) throw new Error("Failed to fetch playlist");
     const tracks = await res.json();
-    resultsEl.innerHTML = "";
-    const addedUris = new Set(); // avoid duplicates in search results
-    tracks.forEach(track => {
-      if (addedUris.has(track.uri)) return;
-      addedUris.add(track.uri);
+    container.innerHTML = "";
+    tracks.forEach((track, i) => {
       const div = document.createElement("div");
       div.className = "track-card";
-      div.innerHTML = `<img src="${track.image}" alt="${track.name}"><strong>${track.name}</strong><br><span style="font-size:0.85em">${track.artist}</span>`;
-      div.onclick = () => addSong(track.uri);
-      resultsEl.appendChild(div);
+      div.innerHTML = `<img src="${track.image}" alt="${track.name}"><strong>${track.name}</strong><br><span style="font-size:0.85em">${track.artist}</span><br><button onclick="deleteSong('${track.uri}')">Delete</button>`;
+      container.appendChild(div);
+      setTimeout(() => div.classList.add("show"), i*100);
     });
-    if (!tracks.length) resultsEl.innerHTML = "No results found";
+    statusEl.innerText = "";
   } catch (err) {
     console.error(err);
-    resultsEl.innerHTML = "ya rabi 😔";
+    statusEl.innerText = "❌ Failed to load playlist";
   }
 };
+
+// Delete song
+async function deleteSong(uri) {
+  const statusEl = document.getElementById("status");
+  statusEl.innerText = "Deleting...";
+  try {
+    const res = await fetch("/api/delete-song", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ songUri: uri })
+    });
+    const data = await res.json();
+    if (data.error) {
+      statusEl.innerText = `❌ Error: ${data.error}`;
+    } else {
+      statusEl.innerText = "✅ Deleted!";
+      document.getElementById("showPlaylistBtn").click(); // refresh playlist view
+    }
+  } catch (err) {
+    console.error(err);
+    statusEl.innerText = `❌ Failed to delete — ${err.message}`;
+  }
+}
+
+document.getElementById("refreshBtn").onclick = fetchPlaylistTracks;
 
 // Initial fetch
 fetchPlaylistTracks();
