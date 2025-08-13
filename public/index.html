@@ -6,42 +6,43 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
 <style>
 body { font-family: 'Montserrat', sans-serif; background: #1e1e2f; color: #fff; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-h1 { margin-bottom: 20px; }
+h1 { margin-bottom: 20px; text-shadow: 0 0 10px #4caf50, 0 0 20px #45a049; }
 #tracks { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; max-width: 900px; }
 .track-card { width: 160px; padding: 10px; border-radius: 12px; background: linear-gradient(135deg, #ff9a9e, #fad0c4); color: #fff; font-weight: bold; cursor: pointer; text-align: center; transition: transform 0.3s, box-shadow 0.3s; }
-.track-card:hover { transform: scale(1.08); box-shadow: 0 0 20px rgba(255,255,255,0.6), 0 8px 25px rgba(0,0,0,0.3); }
+.track-card:hover { transform: scale(1.1); box-shadow: 0 0 25px rgba(255,255,255,0.7), 0 10px 30px rgba(0,0,0,0.4); }
 .track-card img { width: 120px; height: 120px; border-radius: 8px; display: block; margin: 0 auto 8px; }
-button { margin-top: 20px; padding: 10px 20px; border: none; border-radius: 10px; background-color: #4CAF50; color: white; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
-button:hover { background-color: #45a049; }
-#status { margin-top: 15px; font-weight: bold; }
+button { margin-top: 20px; padding: 10px 20px; border: none; border-radius: 10px; background-color: #4CAF50; color: white; font-weight: bold; cursor: pointer; transition: background-color 0.2s, box-shadow 0.3s; }
+button:hover { background-color: #45a049; box-shadow: 0 0 15px #4caf50, 0 0 25px #45a049; }
+#status { margin-top: 15px; font-weight: bold; text-shadow: 0 0 5px #fff; }
 </style>
 </head>
 <body>
-<h1>Choose a song to add!</h1>
+<h1>Pick songs to add to your playlist!</h1>
 <div id="tracks"></div>
 <button id="refreshBtn">Refresh</button>
+<button id="showPlaylistBtn">Show My Playlist</button>
 <p id="status"></p>
 
 <script>
-let allTracks = [];
-let displayedTracks = [];
+let sourceTracks = [];       // songs from source playlist
+let displayedTracks = [];    // 5 random displayed songs
 
-async function fetchPlaylistTracks() {
+async function fetchSourcePlaylist() {
   try {
     const res = await fetch("/api/get-tracks"); // source playlist
-    if (!res.ok) throw new Error("Failed to fetch playlist tracks");
-    allTracks = await res.json();
+    if (!res.ok) throw new Error("Failed to fetch source playlist");
+    sourceTracks = await res.json();
     showRandomTracks();
   } catch (err) {
     console.error(err);
-    document.getElementById("status").innerText = "❌ Error fetching playlist";
+    document.getElementById("status").innerText = "❌ Error fetching source playlist";
   }
 }
 
 function showRandomTracks() {
-  if (!allTracks.length) return;
+  if (!sourceTracks.length) return;
   displayedTracks = [];
-  const copy = [...allTracks];
+  const copy = [...sourceTracks];
   const count = Math.min(5, copy.length);
   for (let i = 0; i < count; i++) {
     const index = Math.floor(Math.random() * copy.length);
@@ -57,12 +58,12 @@ function renderTracks() {
     const div = document.createElement("div");
     div.className = "track-card";
     div.innerHTML = `<img src="${track.image}" alt="${track.name}"><strong>${track.name}</strong><br><span style="font-size:0.85em">${track.artist}</span>`;
-    div.onclick = () => addSong(track.uri);
+    div.onclick = () => addToMyPlaylist(track.uri);
     container.appendChild(div);
   });
 }
 
-async function addSong(trackUri) {
+async function addToMyPlaylist(trackUri) {
   const statusEl = document.getElementById("status");
   statusEl.innerText = "Adding...";
   try {
@@ -83,10 +84,27 @@ async function addSong(trackUri) {
   }
 }
 
+// show songs already in your playlist
+document.getElementById("showPlaylistBtn").onclick = async function() {
+  const statusEl = document.getElementById("status");
+  statusEl.innerText = "Loading playlist...";
+  try {
+    const res = await fetch("/api/get-my-playlist");
+    if (!res.ok) throw new Error("Failed to fetch your playlist");
+    const mySongs = await res.json();
+    displayedTracks = mySongs;
+    renderTracks();
+    statusEl.innerText = `Showing ${mySongs.length} songs in your playlist`;
+  } catch (err) {
+    console.error(err);
+    statusEl.innerText = `❌ ${err.message}`;
+  }
+};
+
 document.getElementById("refreshBtn").onclick = showRandomTracks;
 
 // Initial fetch
-fetchPlaylistTracks();
+fetchSourcePlaylist();
 </script>
 </body>
 </html>
